@@ -132,7 +132,23 @@ For local development, set these in [`local.settings.json`](local.settings.json)
 
 ---
 
-## 7. Create Target GitHub Workflow
+## 7. Get the Function URL
+
+You'll need the function URL (including the function key) to configure the Azure DevOps Service Hook.
+
+1. In the [Azure Portal](https://portal.azure.com), navigate to your **Function App**.
+2. In the left menu, expand **Functions** and click on **devops-workitem-webhook**.
+3. Click **Get Function Url** at the top of the function overview page.
+4. From the **Key** dropdown, select **default (function key)**.
+5. Copy the URL. It will look like:
+
+   `https://<function-app>.azurewebsites.net/api/devops-workitem-webhook?code=<function-key>`
+
+This URL is what you'll provide to Azure DevOps in the Service Hook configuration (Step 9).
+
+---
+
+## 8. Create Target GitHub Workflow
 
 In the **target repository** ([ado-action-trigger](https://github.com/ChristinaPa/ado-action-trigger)), create a workflow at `.github/workflows/ado-feature.yml`. See the workflow file in the [ado-action-trigger repo](https://github.com/ChristinaPa/ado-action-trigger/blob/main/.github/workflows/ado-feature.yml).
 
@@ -147,7 +163,7 @@ Ensure the repository's **Settings → Actions → General → Workflow permissi
 
 ---
 
-## 8. Configure Azure DevOps Service Hook
+## 9. Configure Azure DevOps Service Hook
 
 Azure DevOps [Service Hooks](https://learn.microsoft.com/en-us/azure/devops/service-hooks/services/webhooks?view=azure-devops) allow you to send a JSON payload to an external URL whenever a project event occurs. This integration uses a **Web Hooks** service hook to notify the Azure Function when a work item is updated.
 
@@ -168,6 +184,27 @@ In Azure DevOps:
 5. Click **Test** to verify connectivity, then **Finish** to save.
 
 For full details, see the [Azure DevOps Webhooks documentation](https://learn.microsoft.com/en-us/azure/devops/service-hooks/services/webhooks?view=azure-devops).
+
+---
+
+## 10. Test and Monitor
+
+1. In **Azure DevOps**, change the state of a work item (e.g. move a Feature from *Active* to *Done*).
+2. In the **Azure Portal**, navigate to your **Function App → Functions → devops-workitem-webhook → Monitor**:
+   - **Invocations** — Verify the function was triggered. Each call will appear here with its status code and timestamp.
+   - **Logs** — Click into an invocation to see the function's log output (`context.log` messages), including the work item ID, new state, and GitHub response status.
+3. In **GitHub**, go to the [ado-action-trigger](https://github.com/ChristinaPa/ado-action-trigger) repository:
+   - **Actions tab** — Check that a workflow run was triggered by the `repository_dispatch` event. Click into the run to see step-by-step logs.
+   - **Issues tab** — Confirm a new issue was created with the work item details.
+
+### Troubleshooting
+
+| Symptom | Where to check | Common cause |
+|---|---|---|
+| Function not triggered | Azure Portal → Function → Monitor → Invocations | Service Hook URL or function key is incorrect |
+| Function returns error | Azure Portal → Function → Monitor → Logs | Missing or invalid `GITHUB_OWNER`, `GITHUB_REPO`, or `GITHUB_TOKEN` environment variables |
+| GitHub returns `204` but no workflow runs | GitHub → Actions tab | Workflow file not on the default branch, or `event_type` doesn't match |
+| Workflow runs but no issue created | GitHub → Actions tab → Run logs | Insufficient workflow permissions (enable **Settings → Actions → Workflow permissions → Read and write**) |
 
 ---
 
