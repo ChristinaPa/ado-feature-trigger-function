@@ -97,12 +97,68 @@ The workflow creates an issue titled:
 
 ## Configuring the Azure DevOps Webhook
 
+Azure DevOps [Service Hooks](https://learn.microsoft.com/en-us/azure/devops/service-hooks/services/webhooks?view=azure-devops) allow you to send a JSON payload to an external URL whenever a project event occurs. This integration uses a **Web Hooks** service hook to notify the Azure Function when a work item is updated.
+
+When the hook fires, ADO sends a POST request containing the work item resource and any changed fields (including `System.State`). The Azure Function inspects the payload, and if a state change is present, forwards it to GitHub as a `repository_dispatch` event.
+
+### Setup Steps
+
 1. In your Azure DevOps project, go to **Project Settings → Service Hooks**.
-2. Create a new **Web Hooks** subscription.
-3. Select the **Work item updated** event (and optionally filter by area path, work item type, etc.).
-4. Set the URL to your function endpoint:
+2. Click **Create subscription** and select **Web Hooks** as the service.
+3. Choose the **Work item updated** trigger. Optionally filter by:
+   - Area path
+   - Work item type (e.g. *Feature*, *User Story*)
+   - Specific field changes (e.g. *State*)
+4. Under **Action → Settings**, set the **URL** to your function endpoint:
    - Local: `http://localhost:7071/api/devops-workitem-webhook?code=<function-key>`
    - Deployed: `https://<your-function-app>.azurewebsites.net/api/devops-workitem-webhook?code=<function-key>`
+5. Click **Test** to verify connectivity, then **Finish** to save.
+
+For full details on configuring webhooks in Azure DevOps, see the [official documentation](https://learn.microsoft.com/en-us/azure/devops/service-hooks/services/webhooks?view=azure-devops).
+
+## Why Azure Functions?
+
+There are several ways to host the webhook handler that sits between Azure DevOps and GitHub. Here's a comparison of the main options:
+
+| Option | Pros | Cons |
+|---|---|---|
+| **Azure Functions (Consumption)** | Pay-per-execution, auto-scales to zero, no infrastructure to manage, native Azure integration | Cold-start latency on first invocation |
+| **Azure App Service** | Always-on, full control over the runtime, supports WebSockets | Pays for idle time, overkill for a single lightweight endpoint |
+| **Azure Container Apps** | Containerized workloads, scale-to-zero, good for microservices | More setup overhead (Dockerfile, container registry) for a simple webhook |
+| **Azure Logic Apps** | Low-code/no-code, built-in ADO and GitHub connectors | Limited flexibility for custom logic, harder to version-control |
+| **Self-hosted server (VM / on-prem)** | Full control, no vendor lock-in | Must manage uptime, networking, TLS, scaling, and patching yourself |
+| **AWS Lambda / GCP Cloud Functions** | Similar serverless model | Cross-cloud adds complexity when both ADO and GitHub are already Azure/GitHub-aligned |
+
+### Why we chose Azure Functions (Consumption plan)
+
+- **Cost** — The function only runs when ADO fires a webhook, so with the Consumption plan we pay nothing when idle. Work item state changes are infrequent, making a pay-per-execution model ideal.
+- **Simplicity** — A single JavaScript file with an HTTP trigger is all that's needed. No containers, no routing framework, no always-on server.
+- **Azure-native** — Since Azure DevOps is part of the Azure ecosystem, deploying the function to Azure keeps networking simple and allows future use of Managed Identity or Azure Key Vault for secrets.
+- **Scale** — The Consumption plan automatically handles traffic spikes without configuration.
+
+### Deployment — GitHub as the Source
+
+The function code is hosted in this GitHub repository and deployed to Azure using the **Deployment Center** feature in the Azure Portal. This approach was chosen over alternatives like ZIP deploy or local publishing because:
+
+- **Version control** — All changes are tracked in Git with full commit history, branching, and pull request workflows.
+- **Continuous deployment** — Azure automatically pulls and deploys the latest code whenever changes are pushed to the configured branch, removing the need for manual deployments.
+- **Collaboration** — Team members can review and contribute to the function code through standard GitHub workflows.
+- **Auditability** — Every deployment maps back to a specific commit, making it easy to trace issues or roll back.
+
+#### Configuring Deployment in the Azure Portal
+
+1. In the [Azure Portal](https://portal.azure.com), navigate to your **Function App**.
+2. Go to **Deployment Center** (under the *Deployment* section in the left menu).
+3. Under **Source**, select **GitHub**.
+4. Authorize Azure to access your GitHub account if prompted.
+5. Configure the following:
+   - **Organization**: `ChristinaPa`
+   - **Repository**: `ado-feature-trigger-function`
+   - **Branch**: `main`
+6. Azure will automatically set up a GitHub Actions workflow (or use Kudu-based deployment) to build and deploy the function on every push to the selected branch.
+7. Click **Save**.
+
+Once configured, any push to `main` will automatically deploy the updated function code to Azure.
 
 ## GitHub Actions Workflow (ado-action-trigger repo)
 
