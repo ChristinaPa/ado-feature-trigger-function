@@ -29,6 +29,8 @@ module.exports = async function (context, req) {
     const repo = process.env.GITHUB_REPO;
     const token = process.env.GITHUB_TOKEN;
 
+    context.log(`About to call GitHub dispatch: owner=${owner}, repo=${repo}, event=ado_feature_state_changed`);
+
 
     const response = await fetch(
     `https://api.github.com/repos/${owner}/${repo}/dispatches`,
@@ -49,6 +51,18 @@ module.exports = async function (context, req) {
     }
 );
 
-context.log("GitHub response status:", response.status);
+
+context.log("GitHub dispatch response status:", response.status);
+
+if (!response.ok) {
+  const body = await response.text();
+  context.log("GitHub dispatch response body:", body);
+  // Optionally fail the function so it’s visible in invocations
+  context.res = { status: 500, body: `GitHub dispatch failed: ${response.status} ${body}` };
+  return;
+}
+
+context.log("GitHub dispatch succeeded.");
+``
 
 };
