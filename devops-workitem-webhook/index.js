@@ -5,10 +5,28 @@ module.exports = async function (context, req) {
     const payload = req.body;
     const resource = payload?.resource;
 
-    const workItemId = resource?.workItemId || resource?.id;
+    
+   // Work item id
+   const workItemId =
+   resource?.workItemId ||
+   resource?.id ||
+   resource?.resourceContainers?.workItem?.id;
 
-    const newState = resource?.fields?.["System.State"]?.newValue;
-    const workItemType = resource?.fields?.["System.WorkItemType"]?.newValue;
+   // State: usually comes via resource.fields when it changes
+   const newState =
+   resource?.fields?.["System.State"]?.newValue ??
+   resource?.revision?.fields?.["System.State"];
+
+  // Type: often NOT included unless it changes -> use revision fallback
+  const workItemType =
+  resource?.fields?.["System.WorkItemType"]?.newValue ??
+  resource?.revision?.fields?.["System.WorkItemType"];
+
+// Debug logs
+context.log("WorkItemId:", workItemId);
+context.log("WorkItemType:", workItemType);
+context.log("NewState:", newState);
+
 
     context.log("WorkItemType:", workItemType);
     context.log("NewState:", newState);
